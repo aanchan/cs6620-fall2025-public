@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Audio Player with WER Log</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Basic inline styles for quick setup - consider moving to style.css */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 20px;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0 0 0 / 10%);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .section-box { /* Generic box for sections */
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        input[type="text"], input[type="file"] {
+            width: calc(100% - 130px);
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #playlist {
+            list-style-type: none;
+            padding: 0;
+            max-height: 350px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #fff;
+        }
+        #playlist li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s ease;
+        }
+        #playlist li:last-child {
+            border-bottom: none;
+        }
+        #playlist li:hover {
+            background-color: #e9e9e9;
+        }
+        #playlist li.playing {
+            background-color: #e0ffe0;
+            font-weight: bold;
+        }
+        .transcription-info {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #eaf6ff;
+            border: 1px solid #b3e0ff;
+            border-radius: 5px;
+        }
+        .transcription-info p {
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        .audio-controls {
+            text-align: center;
+        }
+        #audioPlayer {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        #current-song {
+            font-size: 1.2em;
+            color: #007bff;
+            font-weight: bold;
+        }
+        .wer-display {
+            font-size: 0.8em;
+            color: #555;
+            margin-left: 10px;
+            padding: 2px 5px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Python Network Audio Player</h1>
+
+        <div class="section-box log-upload-section">
+            <h2>Load WER Log File</h2>
+            <h3>Option 1: Upload File</h3>
+            <input type="file" id="logFileInput" accept=".txt">
+            <button onclick="uploadLogFile()">Upload Log</button>
+            <p id="log-message-upload"></p>
+            
+            <h3>Option 2: Specify Path on Server</h3>
+            <label for="log_path_input">Path:</label>
+            <input type="text" id="log_path_input" placeholder="/path/to/your/log.txt" size="50">
+            <button onclick="loadLogFromPath()">Load from Path</button>
+            <p id="log-message-path"></p>
+        </div>
+
+        <div class="section-box directory-selection">
+            <h2>Select Audio Directory</h2>
+            <label for="directory_path">Enter Directory Path (e.g., `/path/to/your/music`):</label>
+            <input type="text" id="directory_path" placeholder="/path/to/your/music" size="50">
+            <button onclick="selectDirectory()">Load Directory</button>
+            <p id="directory-message"></p>
+        </div>
+
+        <div class="section-box audio-controls">
+            <audio id="audioPlayer" controls></audio>
+            <p><strong>Now Playing:</strong> <span id="current-song">None</span></p>
+            <div id="transcription-display" class="transcription-info" style="display: none;">
+                <p><strong>Reference:</strong> <span id="ref-text"></span></p>
+                <p><strong>Prediction:</strong> <span id="pred-text"></span></p>
+                <p><strong>WER:</strong> <span id="wer-num"></span></p>
+            </div>
+            <button onclick="playCurrent()">Play</button>
+            <button onclick="pauseAudio()">Pause</button>
+            <button onclick="stopAudio()">Stop</button>
+            <button onclick="playNext()">Next</button>
+            <button onclick="playPrevious()">Previous</button>
+        </div>
+
+        <div class="section-box playlist-section">
+            <h2>Playlist</h2>
+            <ul id="playlist">
+                </ul>
+        </div>
+    </div>
+
+    <script>
+        const directoryPathInput = document.getElementById('directory_path');
+        const directoryMessage = document.getElementById('directory-message');
+        const playlistElement = document.getElementById('playlist');
+        const currentSongElement = document.getElementById('current-song');
+        const audioPlayer = document.getElementById('audioPlayer');
+        
+        const logFileInput = document.getElementById('logFileInput');
+        const logPathInput = document.getElementById('log_path_input');
+        const logMessageUpload = document.getElementById('log-message-upload');
+        const logMessagePath = document.getElementById('log-message-path');
+
+        const transcriptionDisplay = document.getElementById('transcription-display');
+        const refText = document.getElementById('ref-text');
+        const predText = document.getElementById('pred-text');
+        const werNum = document.getElementById('wer-num');
+
+        let currentPlaylistData = []; 
+        let currentPlayingIndex = -1;
+
+        async function uploadLogFile() {
+            const file = logFileInput.files[0];
+            if (!file) {
+                logMessageUpload.textContent = 'Please select a log file.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('log_file', file);
+
+            logMessageUpload.textContent = 'Uploading and parsing log...';
+            logMessagePath.textContent = ''; // Clear other message
+
+            try {
+                const response = await fetch('/upload_log', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                logMessageUpload.textContent = data.message;
+                if (data.success) {
+                    if (directoryPathInput.value) {
+                         selectDirectory(); // Re-load playlist with new transcription data
+                    }
+                }
+            } catch (error) {
+                logMessageUpload.textContent = 'Error uploading log file.';
+                console.error('Error uploading log file:', error);
+            }
+        }
+
+        async function loadLogFromPath() {
+            const logPath = logPathInput.value;
+            if (!logPath) {
+                logMessagePath.textContent = 'Please enter a log file path.';
+                return;
+            }
+
+            logMessagePath.textContent = 'Loading log from path...';
+            logMessageUpload.textContent = ''; // Clear other message
+
+            try {
+                const response = await fetch('/load_log_from_path', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `log_path=${encodeURIComponent(logPath)}`
+                });
+                const data = await response.json();
+                logMessagePath.textContent = data.message;
+                if (data.success) {
+                    if (directoryPathInput.value) {
+                         selectDirectory(); // Re-load playlist with new transcription data
+                    }
+                }
+            } catch (error) {
+                logMessagePath.textContent = 'Error loading log file from path.';
+                console.error('Error loading log file from path:', error);
+            }
+        }
+
+
+        async function selectDirectory() {
+            const path = directoryPathInput.value;
+            const response = await fetch('/select_directory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `directory_path=${encodeURIComponent(path)}`
+            });
+            const data = await response.json();
+            directoryMessage.textContent = data.message;
+            if (data.success) {
+                currentPlaylistData = data.files_with_info;
+                renderPlaylist(currentPlaylistData);
+                directoryPathInput.value = path; 
+                currentPlayingIndex = -1;
+                currentSongElement.textContent = 'None';
+                audioPlayer.src = '';
+                audioPlayer.load();
+                hideTranscriptionDisplay();
+            } else {
+                playlistElement.innerHTML = '';
+                currentSongElement.textContent = 'None';
+                currentPlaylistData = [];
+                currentPlayingIndex = -1;
+                hideTranscriptionDisplay();
+            }
+        }
+
+        function renderPlaylist(playlistData) {
+            playlistElement.innerHTML = '';
+            if (playlistData.length === 0) {
+                playlistElement.innerHTML = '<li>No supported audio files found in this directory.</li>';
+                return;
+            }
+            playlistData.forEach((file, index) => {
+                const li = document.createElement('li');
+                const songNameSpan = document.createElement('span');
+                songNameSpan.textContent = file.name;
+                li.appendChild(songNameSpan);
+
+                if (file.transcription) {
+                    const werSpan = document.createElement('span');
+                    werSpan.classList.add('wer-display'); 
+                    werSpan.textContent = `WER: ${file.transcription.wer.toFixed(4)}`; 
+                    li.appendChild(werSpan);
+                }
+
+                li.onclick = () => playAudioAtIndex(index);
+                playlistElement.appendChild(li);
+            });
+            highlightCurrentSong();
+        }
+
+        function playAudioAtIndex(index) {
+            if (index < 0 || index >= currentPlaylistData.length) {
+                console.warn("Invalid playlist index:", index);
+                return;
+            }
+            currentPlayingIndex = index;
+            const song = currentPlaylistData[currentPlayingIndex];
+            audioPlayer.src = song.url;
+            audioPlayer.play();
+            currentSongElement.textContent = song.name;
+            displayTranscription(song.transcription);
+            highlightCurrentSong();
+        }
+
+        function displayTranscription(transcription) {
+            if (transcription) {
+                refText.textContent = transcription.reference_normalized;
+                predText.textContent = transcription.prediction_normalized;
+                werNum.textContent = transcription.wer.toFixed(4); 
+                transcriptionDisplay.style.display = 'block';
+            } else {
+                hideTranscriptionDisplay();
+            }
+        }
+
+        function hideTranscriptionDisplay() {
+            transcriptionDisplay.style.display = 'none';
+            refText.textContent = '';
+            predText.textContent = '';
+            werNum.textContent = '';
+        }
+
+        function playCurrent() {
+            if (currentPlaylistData.length === 0) {
+                alert("No audio files loaded. Select a directory first.");
+                return;
+            }
+            if (currentPlayingIndex === -1 && currentPlaylistData.length > 0) {
+                playAudioAtIndex(0);
+            } else if (audioPlayer.paused) {
+                audioPlayer.play();
+            }
+        }
+
+        function pauseAudio() {
+            audioPlayer.pause();
+        }
+
+        function stopAudio() {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            currentPlayingIndex = -1;
+            currentSongElement.textContent = 'None';
+            hideTranscriptionDisplay();
+            highlightCurrentSong();
+        }
+
+        function playNext() {
+            if (currentPlaylistData.length === 0) return;
+            let nextIndex = currentPlayingIndex + 1;
+            if (nextIndex >= currentPlaylistData.length) {
+                nextIndex = 0;
+            }
+            playAudioAtIndex(nextIndex);
+        }
+
+        function playPrevious() {
+            if (currentPlaylistData.length === 0) return;
+            let prevIndex = currentPlayingIndex - 1;
+            if (prevIndex < 0) {
+                prevIndex = currentPlaylistData.length - 1;
+            }
+            playAudioAtIndex(prevIndex);
+        }
+
+        function highlightCurrentSong() {
+            const playlistItems = playlistElement.children;
+            for (let i = 0; i < playlistItems.length; i++) {
+                if (i === currentPlayingIndex) {
+                    playlistItems[i].classList.add('playing');
+                } else {
+                    playlistItems[i].classList.remove('playing');
+                }
+            }
+        }
+
+        // Event listener for when audio finishes playing
+        audioPlayer.addEventListener('ended', () => {
+            playNext();
+        });
+
+        // Initialize status when page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            const response = await fetch('/status');
+            const data = await response.json();
+            directoryPathInput.value = data.currentDirectory || '';
+            currentPlaylistData = data.files_with_info || [];
+            renderPlaylist(currentPlaylistData);
+            if (data.logLoaded) {
+                // If log was already loaded on the server (e.g., from a previous run),
+                // update the log message in both places to reflect this.
+                logMessageUpload.textContent = "Log data previously loaded on server.";
+                logMessagePath.textContent = "Log data previously loaded on server.";
+            }
+        });
+    </script>
+</body>
+</html>
