@@ -1,7 +1,11 @@
 import os
 import re
-from flask import Flask, render_template, request, jsonify, send_from_directory
+import csv
+from io import StringIO
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
+from pydub import AudioSegment
+import tempfile
 
 app = Flask(__name__)
 CORS(app)
@@ -16,29 +20,53 @@ parsed_transcription_data = {}
 
 def parse_log_content(log_content):
     """
-    Parses the log content to extract transcription data.
+    Parses the log content to extract error segments for each audio file.
+    Only supports the new CSV/TSV format as in sample_log.txt.
+    Returns a dict mapping audio file basenames to a list of error segments.
     """
     data = {}
-    # Regex to find a block for each file
-    file_block_pattern = re.compile(
-        r"File: (.+\.wav)\s*\n"
-        r"Reference: .*\n" 
-        r"Prediction: .*\n" 
-        r"Reference \(normalized\): (.+)\s*\n"
-        r"Prediction \(normalized\): (.+)\s*\n"
-        r"Individual WER: ([\d.]+)"
-    )
-
-    for match in file_block_pattern.finditer(log_content):
-        filename = os.path.basename(match.group(1)) # Extract just the filename
-        reference = match.group(2).strip()
-        prediction = match.group(3).strip()
-        wer = float(match.group(4))
-        data[filename] = {
-            "reference_normalized": reference,
-            "prediction_normalized": prediction,
-            "wer": wer
+    # Auto-detect delimiter: use tab if more tabs than commas, else comma
+    tab_count = log_content.count('\t')
+    comma_count = log_content.count(',')
+    delimiter = '\t' if tab_count > comma_count else ','
+    reader = csv.reader(StringIO(log_content), delimiter=delimiter)
+    header = next(reader, None)
+    # Find relevant column indices
+    def col(name):
+        try:
+            return header.index(name)
+        except ValueError:
+            return None
+    col_audio = col('transcriptFile')
+    col_long_start = col('longFormStart')
+    col_long_end = col('longFormEnd')
+    col_long_error = col('longFormError')
+    col_short_error = col('shortFormError')
+    col_short_start = col('shortFormStart')
+    col_short_end = col('shortFormEnd')
+    for row in reader:
+        if not row or len(row) <= max(filter(None, [col_audio, col_long_start, col_long_end, col_long_error, col_short_error, col_short_start, col_short_end])):
+            continue
+        audio_path = row[col_audio]
+        filename = os.path.basename(audio_path)
+        try:
+            long_start = float(row[col_long_start]) if col_long_start is not None else None
+            long_end = float(row[col_long_end]) if col_long_end is not None else None
+            short_start = float(row[col_short_start]) if col_short_start is not None and row[col_short_start] else None
+            short_end = float(row[col_short_end]) if col_short_end is not None and row[col_short_end] else None
+        except (ValueError, IndexError):
+            long_start = long_end = short_start = short_end = None
+        segment = {
+            'longFormStart': long_start,
+            'longFormEnd': long_end,
+            'longFormError': row[col_long_error] if col_long_error is not None else '',
+            'shortFormError': row[col_short_error] if col_short_error is not None else '',
+            'shortFormStart': short_start,
+            'shortFormEnd': short_end
         }
+        if filename not in data:
+            data[filename] = []
+        data[filename].append(segment)
     return data
 
 @app.route('/audio_files/<path:filename>')
@@ -50,6 +78,37 @@ def serve_audio_file(filename):
         return send_from_directory(current_directory, filename)
     else:
         return "File not found", 404
+
+@app.route('/audio_segment')
+def serve_audio_segment():
+    """
+    Serves a segment of an audio file, given filename, start, and end times (in seconds).
+    The segment is [start-5, end+5] seconds, clipped to file boundaries.
+    """
+    filename = request.args.get('file')
+    start = request.args.get('start', type=float)
+    end = request.args.get('end', type=float)
+    if not (filename and start is not None and end is not None):
+        return "Missing parameters", 400
+    if not current_directory:
+        return "No directory selected", 400
+    audio_path = os.path.join(current_directory, filename)
+    if not os.path.exists(audio_path):
+        return "Audio file not found", 404
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        duration = len(audio) / 1000.0  # in seconds
+        seg_start = max(0, start - 5)
+        seg_end = min(duration, end + 5)
+        seg_audio = audio[int(seg_start * 1000):int(seg_end * 1000)]
+        # Write to a temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmpf:
+            seg_audio.export(tmpf.name, format='wav')
+            tmpf.flush()
+            return send_file(tmpf.name, mimetype='audio/wav', as_attachment=False, download_name=f'{filename}_segment.wav')
+    except Exception as e:
+        app.logger.error(f"Error extracting audio segment: {e}")
+        return f"Error extracting audio segment: {str(e)}", 500
 
 @app.route('/')
 def index():
@@ -86,13 +145,11 @@ def select_directory():
     for f_path in current_playlist:
         f_name = os.path.basename(f_path)
         file_url = f'/audio_files/{f_name}'
-        
-        transcription_info = parsed_transcription_data.get(f_name, None)
-        
+        error_segments = parsed_transcription_data.get(f_name, [])
         files_with_transcription_info.append({
             "name": f_name,
             "url": file_url,
-            "transcription": transcription_info # Add transcription info if available
+            "error_segments": error_segments
         })
 
     return jsonify({
@@ -178,11 +235,11 @@ def get_status():
         for f_path in current_playlist:
             f_name = os.path.basename(f_path)
             file_url = f'/audio_files/{f_name}'
-            transcription_info = parsed_transcription_data.get(f_name, None)
+            error_segments = parsed_transcription_data.get(f_name, [])
             files_with_transcription_info.append({
                 "name": f_name,
                 "url": file_url,
-                "transcription": transcription_info
+                "error_segments": error_segments
             })
 
     return jsonify({

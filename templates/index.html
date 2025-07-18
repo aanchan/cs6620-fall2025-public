@@ -6,19 +6,46 @@
     <title>Python Audio Player with WER Log</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        /* Basic inline styles for quick setup - consider moving to style.css */
+        html, body {
+            height: 100%;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+        }
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f4;
-            margin: 20px;
             color: #333;
+            min-height: 100vh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
         }
         .container {
             background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0 0 0 / 10%);
-            max-width: 800px;
+            padding-left: clamp(8px, 2vw, 32px);
+            padding-right: clamp(8px, 2vw, 32px);
+            padding-top: 24px;
+            padding-bottom: 24px;
+            border-radius: 0;
+            box-shadow: none;
+            width: 100%;
+            max-width: 1200px;
+            min-height: 100vh;
+            margin: 0 auto;
+        }
+        .section-box, .audio-controls, .playlist-section {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto 24px auto;
+            box-sizing: border-box;
+        }
+        .playlist-section, #playlist {
+            width: 100%;
+            margin: 0;
+        }
+        #playlist {
+            max-width: 1200px;
             margin: 0 auto;
         }
         h1, h2 {
@@ -57,11 +84,14 @@
         #playlist {
             list-style-type: none;
             padding: 0;
-            max-height: 350px;
+            max-height: 600px;
+            min-height: 300px;
             overflow-y: auto;
             border: 1px solid #eee;
             border-radius: 4px;
             background-color: #fff;
+            font-size: 1.1em;
+            width: 100%;
         }
         #playlist li {
             padding: 10px;
@@ -113,6 +143,22 @@
             background-color: #f0f0f0;
             border-radius: 3px;
         }
+        .playlist-section {
+            width: 100%;
+            margin: 0;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding-left: 4px;
+                padding-right: 4px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                max-width: 100vw;
+            }
+            .section-box, .audio-controls, .playlist-section, #playlist {
+                max-width: 100vw;
+            }
+        }
     </style>
 </head>
 <body>
@@ -120,16 +166,16 @@
         <h1>Python Network Audio Player</h1>
 
         <div class="section-box log-upload-section">
-            <h2>Load WER Log File</h2>
+            <h2>Load Error Log File</h2>
             <h3>Option 1: Upload File</h3>
             <input type="file" id="logFileInput" accept=".txt">
-            <button onclick="uploadLogFile()">Upload Log</button>
+            <button onclick="uploadLogFile()">Upload Error Log</button>
             <p id="log-message-upload"></p>
             
             <h3>Option 2: Specify Path on Server</h3>
             <label for="log_path_input">Path:</label>
             <input type="text" id="log_path_input" placeholder="/path/to/your/log.txt" size="50">
-            <button onclick="loadLogFromPath()">Load from Path</button>
+            <button onclick="loadLogFromPath()">Load Error Log from Path</button>
             <p id="log-message-path"></p>
         </div>
 
@@ -265,13 +311,13 @@
                 currentSongElement.textContent = 'None';
                 audioPlayer.src = '';
                 audioPlayer.load();
-                hideTranscriptionDisplay();
+                // hideTranscriptionDisplay(); // Removed as transcription is not used
             } else {
                 playlistElement.innerHTML = '';
                 currentSongElement.textContent = 'None';
                 currentPlaylistData = [];
                 currentPlayingIndex = -1;
-                hideTranscriptionDisplay();
+                // hideTranscriptionDisplay(); // Removed as transcription is not used
             }
         }
 
@@ -287,11 +333,52 @@
                 songNameSpan.textContent = file.name;
                 li.appendChild(songNameSpan);
 
-                if (file.transcription) {
-                    const werSpan = document.createElement('span');
-                    werSpan.classList.add('wer-display'); 
-                    werSpan.textContent = `WER: ${file.transcription.wer.toFixed(4)}`; 
-                    li.appendChild(werSpan);
+                // Error segments UI
+                if (file.error_segments && file.error_segments.length > 0) {
+                    const segList = document.createElement('ul');
+                    segList.style.margin = '10px 0 0 20px';
+                    segList.style.padding = '0';
+                    segList.style.listStyleType = 'disc';
+                    file.error_segments.forEach((seg, segIdx) => {
+                        const segLi = document.createElement('li');
+                        segLi.style.marginBottom = '6px';
+                        // Long form error clickable
+                        if (seg.longFormError && seg.longFormStart != null && seg.longFormEnd != null) {
+                            const longBtn = document.createElement('button');
+                            longBtn.textContent = `Long: ${seg.longFormError}`;
+                            longBtn.style.marginRight = '8px';
+                            longBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                playAudioSegment(index, seg.longFormStart, seg.longFormEnd);
+                            };
+                            segLi.appendChild(longBtn);
+                            // Show raw timestamps
+                            const longTime = document.createElement('span');
+                            longTime.style.marginRight = '12px';
+                            longTime.style.fontSize = '0.95em';
+                            longTime.style.color = '#555';
+                            longTime.textContent = `[${formatTime(seg.longFormStart)} - ${formatTime(seg.longFormEnd)}]`;
+                            segLi.appendChild(longTime);
+                        }
+                        // Short form error clickable
+                        if (seg.shortFormError && seg.shortFormStart != null && seg.shortFormEnd != null) {
+                            const shortBtn = document.createElement('button');
+                            shortBtn.textContent = `Short: ${seg.shortFormError}`;
+                            shortBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                playAudioSegment(index, seg.shortFormStart, seg.shortFormEnd);
+                            };
+                            segLi.appendChild(shortBtn);
+                            // Show raw timestamps
+                            const shortTime = document.createElement('span');
+                            shortTime.style.fontSize = '0.95em';
+                            shortTime.style.color = '#555';
+                            shortTime.textContent = `[${formatTime(seg.shortFormStart)} - ${formatTime(seg.shortFormEnd)}]`;
+                            segLi.appendChild(shortTime);
+                        }
+                        segList.appendChild(segLi);
+                    });
+                    li.appendChild(segList);
                 }
 
                 li.onclick = () => playAudioAtIndex(index);
@@ -310,27 +397,32 @@
             audioPlayer.src = song.url;
             audioPlayer.play();
             currentSongElement.textContent = song.name;
-            displayTranscription(song.transcription);
+            // displayTranscription(song.transcription); // Removed as transcription is not used
             highlightCurrentSong();
         }
 
-        function displayTranscription(transcription) {
-            if (transcription) {
-                refText.textContent = transcription.reference_normalized;
-                predText.textContent = transcription.prediction_normalized;
-                werNum.textContent = transcription.wer.toFixed(4); 
-                transcriptionDisplay.style.display = 'block';
-            } else {
-                hideTranscriptionDisplay();
+        // Play a segment of the audio file (seek and play between start and end seconds)
+        function playAudioSegment(fileIndex, start, end) {
+            if (fileIndex < 0 || fileIndex >= currentPlaylistData.length) return;
+            const file = currentPlaylistData[fileIndex];
+            if (audioPlayer.src !== window.location.origin + file.url && audioPlayer.src !== file.url) {
+                audioPlayer.src = file.url;
             }
+            currentPlayingIndex = fileIndex;
+            currentSongElement.textContent = file.name;
+            audioPlayer.currentTime = start;
+            audioPlayer.play();
+            highlightCurrentSong();
+            // Stop at end time
+            audioPlayer.ontimeupdate = function() {
+                if (audioPlayer.currentTime >= end) {
+                    audioPlayer.pause();
+                    audioPlayer.ontimeupdate = null;
+                }
+            };
         }
 
-        function hideTranscriptionDisplay() {
-            transcriptionDisplay.style.display = 'none';
-            refText.textContent = '';
-            predText.textContent = '';
-            werNum.textContent = '';
-        }
+        // Remove displayTranscription and hideTranscriptionDisplay logic, as WER/transcription is not used in new UI
 
         function playCurrent() {
             if (currentPlaylistData.length === 0) {
@@ -353,7 +445,7 @@
             audioPlayer.currentTime = 0;
             currentPlayingIndex = -1;
             currentSongElement.textContent = 'None';
-            hideTranscriptionDisplay();
+            // hideTranscriptionDisplay(); // Removed as transcription is not used
             highlightCurrentSong();
         }
 
@@ -390,6 +482,16 @@
         audioPlayer.addEventListener('ended', () => {
             playNext();
         });
+
+        // Helper to format seconds as hh:mm:ss.ss
+        function formatTime(secs) {
+            if (isNaN(secs) || secs === null) return '--:--:--';
+            secs = Number(secs);
+            const hours = Math.floor(secs / 3600);
+            const minutes = Math.floor((secs % 3600) / 60);
+            const seconds = (secs % 60).toFixed(2).padStart(5, '0');
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds}`;
+        }
 
         // Initialize status when page loads
         document.addEventListener('DOMContentLoaded', async () => {
