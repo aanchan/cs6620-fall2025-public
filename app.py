@@ -390,10 +390,18 @@ def save_label():
         if not all(key in data for key in ['record_id', 'start_time', 'end_time', 'audio_file']):
             return jsonify({"success": False, "message": "Missing required fields"})
         
+        # Find the error phrase from the original CSV data
+        error_phrase = ""
+        for error_record in csv_error_data:
+            if str(error_record['record_id']) == str(data['record_id']):
+                error_phrase = error_record['example_phrase']
+                break
+        
         # Prepare the labeled data
         label_data = {
             'record_id': data['record_id'],
             'audio_file': data['audio_file'],
+            'error_phrase': error_phrase,
             'start_time': round(data['start_time'], 3),
             'end_time': round(data['end_time'], 3),
             'duration': round(data['end_time'] - data['start_time'], 3),
@@ -410,7 +418,7 @@ def save_label():
         os.makedirs("/opt/data", exist_ok=True)
         
         with open(output_file, 'a', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['record_id', 'audio_file', 'start_time', 'end_time', 'duration', 'labeled_at']
+            fieldnames = ['record_id', 'audio_file', 'error_phrase', 'start_time', 'end_time', 'duration', 'labeled_at']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
             # Write header if file is new

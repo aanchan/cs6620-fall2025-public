@@ -696,12 +696,13 @@
                     
                     // Build the labels display
                     let html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0;">';
-                    html += '<tr style="background: #f0f0f0; font-weight: bold;"><th style="border: 1px solid #ddd; padding: 8px;">Record ID</th><th style="border: 1px solid #ddd; padding: 8px;">Audio File</th><th style="border: 1px solid #ddd; padding: 8px;">Start Time</th><th style="border: 1px solid #ddd; padding: 8px;">End Time</th><th style="border: 1px solid #ddd; padding: 8px;">Duration</th><th style="border: 1px solid #ddd; padding: 8px;">Labeled At</th></tr>';
+                    html += '<tr style="background: #f0f0f0; font-weight: bold;"><th style="border: 1px solid #ddd; padding: 8px;">Record ID</th><th style="border: 1px solid #ddd; padding: 8px;">Audio File</th><th style="border: 1px solid #ddd; padding: 8px;">Error Phrase</th><th style="border: 1px solid #ddd; padding: 8px;">Start Time</th><th style="border: 1px solid #ddd; padding: 8px;">End Time</th><th style="border: 1px solid #ddd; padding: 8px;">Duration</th><th style="border: 1px solid #ddd; padding: 8px;">Labeled At</th></tr>';
                     
                     data.data.forEach(label => {
                         html += `<tr>
                             <td style="border: 1px solid #ddd; padding: 8px;">${label.record_id}</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${label.audio_file}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-style: italic;">"${label.error_phrase || 'N/A'}"</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${label.start_time}s</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${label.end_time}s</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${label.duration}s</td>
