@@ -53,6 +53,7 @@ sudo chown ec2-user:ec2-user /var/log/speech-labeling
 
 # Configure nginx
 echo -e "${YELLOW}🌐 Configuring nginx...${NC}"
+sudo mkdir -p /etc/nginx/conf.d
 sudo tee /etc/nginx/conf.d/speech-labeling.conf > /dev/null <<EOF
 server {
     listen 80;

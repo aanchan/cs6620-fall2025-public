@@ -108,9 +108,39 @@ ssh -i ~/.ssh/my-ec2-key.pem ec2-user@$INSTANCE_IP
 # SSH into server
 ssh -i ~/.ssh/my-ec2-key.pem ec2-user@$INSTANCE_IP
 
-# Clone the repository (includes server-setup.sh)
-git clone https://github.com/aanchan/network-audio-player.git
-cd network-audio-player
+# Install git first
+sudo yum install -y git
+
+# Generate SSH key for GitHub access on the server
+ssh-keygen -t ed25519 -C "ec2-user@$(hostname)" -f ~/.ssh/github_key -N ""
+
+# Configure SSH to use the key for GitHub
+cat >> ~/.ssh/config <<EOF
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_key
+EOF
+
+# Set proper permissions for SSH files
+chmod 600 ~/.ssh/config ~/.ssh/github_key
+chmod 644 ~/.ssh/github_key.pub
+
+# Display the public key to add to GitHub
+echo "📋 Copy this public key and add it to your GitHub account:"
+echo "   Go to: GitHub Settings > SSH and GPG keys > New SSH key"
+echo ""
+cat ~/.ssh/github_key.pub
+echo ""
+echo "⏸️  After adding the key to GitHub, press Enter to continue..."
+read
+
+# Test GitHub SSH connection
+ssh -T git@github.com
+
+# Clone the repository using SSH (includes server-setup.sh)
+git clone git@github.com:aanchan/cs6620-educational-repo.git
+cd cs6620-educational-repo
 
 # Checkout the week-02 branch
 git checkout week-02-basic-app
