@@ -396,21 +396,33 @@ aws ec2 authorize-security-group-ingress --group-name ssh-only --protocol tcp --
 AMI_ID=$(aws ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-*" --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text)
 aws ec2 run-instances --image-id $AMI_ID --count 1 --instance-type t2.micro --key-name my-ec2-key --security-groups ssh-only
 
-# 4. Connect and set up server
+# 5. Connect and set up server
 ssh -i ~/.ssh/my-ec2-key.pem ec2-user@$INSTANCE_IP
+sudo yum install -y git
+ssh-keygen -t ed25519 -C "ec2-user@$(hostname)" -f ~/.ssh/github_key -N ""
+cat >> ~/.ssh/config <<EOF
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_key
+EOF
+chmod 600 ~/.ssh/config ~/.ssh/github_key
+chmod 644 ~/.ssh/github_key.pub
+# Add public key to GitHub, then:
+git clone git@github.com:aanchan/cs6620-educational-repo.git
+cd cs6620-educational-repo
+git checkout week-02-basic-app
 ./server-setup.sh
 
-# 5. Deploy application manually
-scp -i ~/.ssh/my-ec2-key.pem -r . ec2-user@$INSTANCE_IP:/opt/speech-labeling/
+# 6. Deploy application files (copy from cloned repo to deployment directory)
+cp -r ~/cs6620-educational-repo/* /opt/speech-labeling/
 
-# 5. Configure as service
-# (Follow systemd service setup above)
+# 7. Use helper script to deploy
+cd /opt/speech-labeling
+./deploy-app.sh
 
-# 6. Configure web server
-# (Follow nginx setup above)
-
-# 7. Test deployment
-curl http://$INSTANCE_IP/labeling
+# 8. Test deployment
+curl http://$INSTANCE_IP
 ```
 
 ---
