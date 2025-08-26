@@ -111,7 +111,7 @@ sudo systemctl daemon-reload
 
 # Create deployment script
 echo -e "${YELLOW}📜 Creating deployment helper scripts...${NC}"
-tee /home/ec2-user/deploy-app.sh > /dev/null <<EOF
+tee ./deploy-app.sh > /dev/null <<EOF
 #!/bin/bash
 # deploy-app.sh - Deploy the speech labeling application
 
@@ -151,10 +151,10 @@ echo "🔍 Access your application at: http://$(curl -s ifconfig.me)"
 echo "🎛️  Labeling interface: http://$(curl -s ifconfig.me)/labeling"
 EOF
 
-chmod +x /home/ec2-user/deploy-app.sh
+chmod +x ./deploy-app.sh
 
 # Create log monitoring script
-tee /home/ec2-user/monitor-logs.sh > /dev/null <<EOF
+tee ./monitor-logs.sh > /dev/null <<EOF
 #!/bin/bash
 # monitor-logs.sh - Monitor application and nginx logs
 
@@ -177,7 +177,7 @@ trap 'kill \$APP_PID \$NGINX_PID 2>/dev/null; exit' INT
 wait
 EOF
 
-chmod +x /home/ec2-user/monitor-logs.sh
+chmod +x ./monitor-logs.sh
 
 # Display setup summary
 echo ""
