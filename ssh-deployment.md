@@ -42,20 +42,23 @@ aws ec2 create-key-pair --key-name my-ec2-key --query 'KeyMaterial' --output tex
 chmod 400 ~/.ssh/my-ec2-key.pem
 ```
 
-### 3. Create Secure Security Group
+### 3. Create Security Groups (Best Practice: Separate SSH and Web Access)
 ```bash
 # Get your current public IP address
 MY_IP=$(curl -s https://checkip.amazonaws.com)/32
 
-# Create security group with SSH access restricted to your IP only
-aws ec2 create-security-group --group-name ssh-only --description "SSH access for deployment"
+# Create separate security groups for SSH and web access
+aws ec2 create-security-group --group-name ssh-access --description "SSH access for administrators"
+aws ec2 create-security-group --group-name web-access --description "HTTP access for web application"
 
-# Add SSH rule for your IP only (SECURE - recommended)
-aws ec2 authorize-security-group-ingress --group-name ssh-only --protocol tcp --port 22 --cidr $MY_IP
+# Configure SSH access (restricted to your IP only)
+aws ec2 authorize-security-group-ingress --group-name ssh-access --protocol tcp --port 22 --cidr $MY_IP
+
+# Configure web access (open to public for web app)
+aws ec2 authorize-security-group-ingress --group-name web-access --protocol tcp --port 80 --cidr 0.0.0.0/0
 
 # ⚠️  SECURITY WARNING: Never use 0.0.0.0/0 for SSH access in production!
-# This would allow SSH access from anywhere on the internet:
-# aws ec2 authorize-security-group-ingress --group-name ssh-only --protocol tcp --port 22 --cidr 0.0.0.0/0  # DON'T DO THIS!
+# SSH should only be accessible from trusted IP addresses!
 ```
 
 ### 4. Launch AWS EC2 Instance
@@ -72,16 +75,29 @@ aws ec2 run-instances \
     --key-name my-ec2-key \
     --security-groups default
 
-# Option 2: Using secure ssh-only group (SSH will work)
+# Option 2: Using secure groups with SSH and web access (RECOMMENDED)
 aws ec2 run-instances \
     --image-id $AMI_ID \
     --count 1 \
     --instance-type t2.micro \
     --key-name my-ec2-key \
-    --security-groups ssh-only
+    --security-groups ssh-access web-access \
+    --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":50,"VolumeType":"gp2"}}]'
 ```
 
-### 5. Connect to Server
+### 5. Fix Existing Instance Security Groups (if needed)
+```bash
+# If you already have a running instance with wrong security groups, fix it:
+
+# Get security group IDs
+SSH_SG_ID=$(aws ec2 describe-security-groups --group-names ssh-access --query 'SecurityGroups[0].GroupId' --output text)
+WEB_SG_ID=$(aws ec2 describe-security-groups --group-names web-access --query 'SecurityGroups[0].GroupId' --output text)
+
+# Apply both security groups to existing instance
+aws ec2 modify-instance-attribute --instance-id INSTANCE_ID --groups $SSH_SG_ID $WEB_SG_ID
+```
+
+### 6. Connect to Server
 ```bash
 # Get instance public IP
 INSTANCE_IP=$(aws ec2 describe-instances \
@@ -93,10 +109,6 @@ echo "Connecting to: $INSTANCE_IP"
 
 # SSH into server using EC2 Key Pair
 ssh -i ~/.ssh/my-ec2-key.pem ec2-user@$INSTANCE_IP
-
-# If you get "Operation timed out" error, your instance likely uses the 'default' 
-# security group which blocks SSH. Fix by modifying the security group:
-# aws ec2 modify-instance-attribute --instance-id INSTANCE_ID --groups sg-xxxxx
 ```
 
 ---
@@ -292,49 +304,6 @@ sudo nginx -t
 # Start nginx
 sudo systemctl enable nginx
 sudo systemctl start nginx
-```
-
----
-
-## 🎵 Audio File Management
-
-### Upload Audio Files
-```bash
-# Create audio upload script
-cat > upload-audio.sh <<EOF
-#!/bin/bash
-# upload-audio.sh - Upload audio files to server
-
-SERVER_IP=\$1
-AUDIO_DIR=\$2
-
-if [ -z "\$SERVER_IP" ] || [ -z "\$AUDIO_DIR" ]; then
-    echo "Usage: \$0 <server-ip> <local-audio-directory>"
-    exit 1
-fi
-
-echo "📁 Uploading audio files from \$AUDIO_DIR to \$SERVER_IP"
-
-# Create remote directory
-ssh -i ~/.ssh/my-ec2-key.pem ec2-user@\$SERVER_IP "mkdir -p /opt/audio"
-
-# Upload files with progress
-rsync -avz --progress -e "ssh -i ~/.ssh/my-ec2-key.pem" \
-    \$AUDIO_DIR/ ec2-user@\$SERVER_IP:/opt/audio/
-
-echo "✅ Audio files uploaded successfully!"
-EOF
-
-chmod +x upload-audio.sh
-```
-
-### CSV Data Upload
-```bash
-# Upload CSV data file
-scp -i ~/.ssh/my-ec2-key.pem err-dataset-orig.csv ec2-user@$INSTANCE_IP:/opt/data/err-dataset.csv
-
-# Set permissions
-ssh -i ~/.ssh/my-ec2-key.pem ec2-user@$INSTANCE_IP "chmod 644 /opt/data/err-dataset.csv"
 ```
 
 ---

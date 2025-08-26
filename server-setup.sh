@@ -117,6 +117,10 @@ tee /home/ec2-user/deploy-app.sh > /dev/null <<EOF
 
 echo "🚀 Deploying Speech Labeling Application"
 
+# Copy application files from cloned repo to deployment directory
+echo "📁 Copying application files..."
+cp -r ~/cs6620-educational-repo/* /opt/speech-labeling/
+
 # Navigate to application directory
 cd /opt/speech-labeling
 
