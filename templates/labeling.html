@@ -314,8 +314,11 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
             try {
+                console.log('Page loading, checking server status...');
                 const response = await fetch('/status');
                 const data = await response.json();
+                
+                console.log('Server status:', data);
                 
                 if (data.currentDirectory) {
                     document.getElementById('directory_path').value = data.currentDirectory;
@@ -324,11 +327,22 @@
                 }
 
                 if (data.csvLoaded && data.csvRecordCount > 0) {
+                    console.log('CSV is loaded, fetching data...');
                     await loadCsvData();
                     showMessage('csv-message', `Auto-loaded CSV with ${data.csvRecordCount} error records`, 'success');
+                } else {
+                    console.log('CSV not loaded or no records:', data);
+                    // Try to load anyway in case the status is wrong
+                    await loadCsvData();
                 }
             } catch (error) {
                 console.error('Error loading initial status:', error);
+                // Fallback: try to load CSV data anyway
+                try {
+                    await loadCsvData();
+                } catch (fallbackError) {
+                    console.error('Fallback CSV load also failed:', fallbackError);
+                }
             }
         });
 
@@ -396,11 +410,15 @@
 
         async function loadCsvData() {
             try {
+                console.log('Loading CSV data...');
                 const response = await fetch('/get_csv_data');
                 const data = await response.json();
                 
+                console.log('CSV data response:', data);
+                
                 if (data.success) {
                     csvData = data.data;
+                    console.log('CSV data loaded:', csvData.length, 'records');
                     renderErrorList();
                     document.getElementById('labeling-section').style.display = 'block';
                     

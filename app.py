@@ -533,8 +533,10 @@ def auto_load_data():
         except Exception as e:
             app.logger.error(f"Failed to auto-load audio files: {e}")
     
-    # Auto-load CSV file
-    csv_path = "/opt/data/err-dataset.csv"
+    # Auto-load CSV file - try both possible names
+    csv_path = "/opt/data/err-dataset-orig.csv"
+    if not os.path.exists(csv_path):
+        csv_path = "/opt/data/err-dataset.csv"
     if os.path.exists(csv_path):
         try:
             with open(csv_path, 'r', encoding='utf-8') as f:
