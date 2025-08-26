@@ -42,6 +42,26 @@
             border-radius: 5px;
             background-color: #f9f9f9;
         }
+        .section-box.collapsed {
+            padding: 8px 15px;
+            background-color: #f5f5f5;
+        }
+        .section-box.collapsed h2 {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        .section-toggle {
+            cursor: pointer;
+            user-select: none;
+        }
+        .section-toggle::before {
+            content: "▼ ";
+            font-size: 12px;
+        }
+        .section-box.collapsed .section-toggle::before {
+            content: "▶ ";
+        }
         .controls-row {
             display: flex;
             gap: 10px;
@@ -178,29 +198,33 @@
     <div class="container">
         <h1>Speech Error Labeling Interface</h1>
 
-        <div class="section-box">
-            <h2>1. Load CSV Error Data</h2>
-            <div class="controls-row">
-                <input type="file" id="csvFileInput" accept=".csv">
-                <button onclick="uploadCsvFile()">Upload CSV</button>
-                <span>or</span>
-                <input type="text" id="csv_path" placeholder="/path/to/err-dataset-orig.csv">
-                <button onclick="loadCsvFromPath()">Load from Path</button>
+        <div class="section-box collapsed" id="csv-section">
+            <h2 class="section-toggle" onclick="toggleSection('csv-section')">Data Setup: Load CSV Error Data (Auto-loaded)</h2>
+            <div class="section-content" style="display: none;">
+                <div class="controls-row">
+                    <input type="file" id="csvFileInput" accept=".csv">
+                    <button onclick="uploadCsvFile()">Upload CSV</button>
+                    <span>or</span>
+                    <input type="text" id="csv_path" placeholder="/path/to/err-dataset-orig.csv">
+                    <button onclick="loadCsvFromPath()">Load from Path</button>
+                </div>
+                <div id="csv-message" class="message" style="display: none;"></div>
             </div>
-            <div id="csv-message" class="message" style="display: none;"></div>
         </div>
 
-        <div class="section-box">
-            <h2>2. Select Audio Directory</h2>
-            <div class="controls-row">
-                <input type="text" id="directory_path" placeholder="/path/to/audio/files">
-                <button onclick="selectDirectory()">Load Directory</button>
+        <div class="section-box collapsed" id="directory-section">
+            <h2 class="section-toggle" onclick="toggleSection('directory-section')">Data Setup: Select Audio Directory (Auto-loaded)</h2>
+            <div class="section-content" style="display: none;">
+                <div class="controls-row">
+                    <input type="text" id="directory_path" placeholder="/path/to/audio/files">
+                    <button onclick="selectDirectory()">Load Directory</button>
+                </div>
+                <div id="directory-message" class="message" style="display: none;"></div>
             </div>
-            <div id="directory-message" class="message" style="display: none;"></div>
         </div>
 
         <div class="section-box" id="labeling-section" style="display: none;">
-            <h2>3. Label Speech Errors</h2>
+            <h2>Label Speech Errors</h2>
             
             <div class="controls-row">
                 <h3>Error Records (<span id="error-count">0</span>):</h3>
@@ -246,10 +270,11 @@
         </div>
         
         <div class="section-box" id="results-section">
-            <h2>4. View Labeled Results</h2>
+            <h2>View Labeled Results</h2>
             <div class="controls-row">
                 <button onclick="viewLabels()">View Labels</button>
                 <button onclick="downloadLabels()">Download CSV</button>
+                <button onclick="deleteLabels()" style="background-color: #dc3545;">Delete All Labels</button>
                 <span id="labels-count">No labels saved yet</span>
             </div>
             
@@ -273,6 +298,19 @@
         let currentRegion = null;
         let audioDirectory = '';
 
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const content = section.querySelector('.section-content');
+            
+            if (section.classList.contains('collapsed')) {
+                section.classList.remove('collapsed');
+                content.style.display = 'block';
+            } else {
+                section.classList.add('collapsed');
+                content.style.display = 'none';
+            }
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
             try {
@@ -282,10 +320,12 @@
                 if (data.currentDirectory) {
                     document.getElementById('directory_path').value = data.currentDirectory;
                     audioDirectory = data.currentDirectory;
+                    showMessage('directory-message', `Auto-loaded directory: ${data.currentDirectory}`, 'success');
                 }
 
                 if (data.csvLoaded && data.csvRecordCount > 0) {
                     await loadCsvData();
+                    showMessage('csv-message', `Auto-loaded CSV with ${data.csvRecordCount} error records`, 'success');
                 }
             } catch (error) {
                 console.error('Error loading initial status:', error);
@@ -363,6 +403,13 @@
                     csvData = data.data;
                     renderErrorList();
                     document.getElementById('labeling-section').style.display = 'block';
+                    
+                    // If we have both CSV data and audio directory, enable full functionality
+                    if (audioDirectory && csvData.length > 0) {
+                        console.log('Both CSV and audio directory loaded - interface ready');
+                    }
+                } else {
+                    console.error('Failed to load CSV data:', data.message);
                 }
             } catch (error) {
                 console.error('Error loading CSV data:', error);
@@ -734,6 +781,36 @@
             document.body.removeChild(link);
             
             showMessage('labels-message', 'Download started...', 'success');
+        }
+
+        async function deleteLabels() {
+            if (!confirm('Are you sure you want to delete ALL labeled segments? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/delete_labels', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('labels-message', data.message, 'success');
+                    
+                    // Clear the displayed labels
+                    document.getElementById('labels-list').style.display = 'none';
+                    document.getElementById('labels-count').textContent = 'No labels saved yet';
+                } else {
+                    showMessage('labels-message', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('labels-message', 'Error deleting labels.', 'error');
+                console.error('Error:', error);
+            }
         }
 
         function showMessage(elementId, message, type) {

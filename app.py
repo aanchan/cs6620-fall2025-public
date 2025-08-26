@@ -466,7 +466,17 @@ def view_labels():
         with open(output_file, 'r', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                labeled_segments.append(dict(row))
+                # Ensure all expected fields exist with defaults
+                segment = {
+                    'record_id': row.get('record_id', ''),
+                    'audio_file': row.get('audio_file', ''),
+                    'error_phrase': row.get('error_phrase', ''),  # Handle missing column
+                    'start_time': row.get('start_time', '0'),
+                    'end_time': row.get('end_time', '0'),
+                    'duration': row.get('duration', '0'),
+                    'labeled_at': row.get('labeled_at', '')
+                }
+                labeled_segments.append(segment)
         
         return jsonify({
             "success": True,
@@ -476,6 +486,21 @@ def view_labels():
         
     except Exception as e:
         return jsonify({"success": False, "message": f"Error reading labels file: {str(e)}", "data": []})
+
+
+@app.route('/delete_labels', methods=['POST'])
+def delete_labels():
+    """Delete the labeled segments file"""
+    output_file = "/opt/data/labeled-segments.csv"
+    
+    try:
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            return jsonify({"success": True, "message": "All labeled segments deleted successfully"})
+        else:
+            return jsonify({"success": False, "message": "No labeled segments file found to delete"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error deleting labels file: {str(e)}"})
 
 
 # Auto-load CSV and audio files on startup
