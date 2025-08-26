@@ -18,6 +18,10 @@ SUPPORTED_AUDIO_EXTENSIONS = ('.mp3', '.wav', '.ogg')
 # Global variable to store parsed log data
 parsed_transcription_data = {}
 
+# Global variables for CSV error labeling
+csv_error_data = []
+csv_file_loaded = False
+
 def parse_log_content(log_content):
     """
     Parses the log content to extract error segments for each audio file.
@@ -245,8 +249,169 @@ def get_status():
     return jsonify({
         "currentDirectory": current_directory,
         "files_with_info": files_with_transcription_info,
-        "logLoaded": bool(parsed_transcription_data)
+        "logLoaded": bool(parsed_transcription_data),
+        "csvLoaded": csv_file_loaded,
+        "csvRecordCount": len(csv_error_data)
     })
 
+
+# Error labeling routes
+
+@app.route('/labeling')
+def labeling():
+    """Serve the labeling interface"""
+    return render_template('labeling.html')
+
+
+@app.route('/load_csv', methods=['POST'])
+def load_csv():
+    """Load CSV error data from file upload or path"""
+    global csv_error_data, csv_file_loaded
+    
+    try:
+        csv_content = None
+        
+        # Check if file was uploaded
+        if 'csv_file' in request.files:
+            file = request.files['csv_file']
+            if file and file.filename:
+                csv_content = file.read().decode('utf-8')
+        
+        # Check if path was provided
+        elif 'csv_path' in request.form:
+            csv_path = request.form['csv_path'].strip()
+            if csv_path and os.path.exists(csv_path):
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    csv_content = f.read()
+            else:
+                return jsonify({"success": False, "message": f"CSV file not found at path: {csv_path}"})
+        
+        if not csv_content:
+            return jsonify({"success": False, "message": "No CSV file provided"})
+        
+        # Parse CSV content
+        csv_error_data = []
+        reader = csv.DictReader(StringIO(csv_content))
+        
+        for row in reader:
+            # Expected columns: record_id, record_file, example_phrase, record_time
+            if all(col in row for col in ['record_id', 'record_file', 'example_phrase', 'record_time']):
+                csv_error_data.append({
+                    'record_id': row['record_id'],
+                    'record_file': row['record_file'],
+                    'example_phrase': row['example_phrase'],
+                    'record_time': float(row['record_time'])
+                })
+        
+        csv_file_loaded = True
+        return jsonify({
+            "success": True, 
+            "message": f"CSV loaded successfully. {len(csv_error_data)} error records found.",
+            "record_count": len(csv_error_data)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error loading CSV: {str(e)}"})
+
+
+@app.route('/get_csv_data', methods=['GET'])
+def get_csv_data():
+    """Return the loaded CSV error data"""
+    if not csv_file_loaded:
+        return jsonify({"success": False, "message": "No CSV data loaded"})
+    
+    return jsonify({
+        "success": True,
+        "data": csv_error_data,
+        "count": len(csv_error_data)
+    })
+
+
+@app.route('/save_label', methods=['POST'])
+def save_label():
+    """Save a labeled error region to CSV file"""
+    try:
+        data = request.get_json()
+        
+        # Expected data: record_id, start_time, end_time, audio_file
+        if not all(key in data for key in ['record_id', 'start_time', 'end_time', 'audio_file']):
+            return jsonify({"success": False, "message": "Missing required fields"})
+        
+        # Prepare the labeled data
+        label_data = {
+            'record_id': data['record_id'],
+            'audio_file': data['audio_file'],
+            'start_time': round(data['start_time'], 3),
+            'end_time': round(data['end_time'], 3),
+            'duration': round(data['end_time'] - data['start_time'], 3),
+            'labeled_at': __import__('datetime').datetime.now().isoformat()
+        }
+        
+        # Save to CSV file
+        output_file = "/opt/data/labeled-segments.csv"
+        
+        # Check if file exists to determine if we need to write headers
+        file_exists = os.path.exists(output_file)
+        
+        # Ensure the directory exists
+        os.makedirs("/opt/data", exist_ok=True)
+        
+        with open(output_file, 'a', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['record_id', 'audio_file', 'start_time', 'end_time', 'duration', 'labeled_at']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # Write header if file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            # Write the labeled data
+            writer.writerow(label_data)
+        
+        app.logger.info(f"Label saved to {output_file}: Record {data['record_id']}, "
+                       f"Time: {data['start_time']:.3f}-{data['end_time']:.3f}s, "
+                       f"File: {data['audio_file']}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Label saved for record {data['record_id']} to {output_file}"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error saving label: {e}")
+        return jsonify({"success": False, "message": f"Error saving label: {str(e)}"})
+
+
+# Auto-load CSV on startup if it exists
+def auto_load_csv():
+    """Try to auto-load CSV from /opt/data/err-dataset.csv"""
+    global csv_error_data, csv_file_loaded
+    
+    csv_path = "/opt/data/err-dataset.csv"
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                csv_content = f.read()
+            
+            csv_error_data = []
+            reader = csv.DictReader(StringIO(csv_content))
+            
+            for row in reader:
+                if all(col in row for col in ['record_id', 'record_file', 'example_phrase', 'record_time']):
+                    csv_error_data.append({
+                        'record_id': row['record_id'],
+                        'record_file': row['record_file'],
+                        'example_phrase': row['example_phrase'],
+                        'record_time': float(row['record_time'])
+                    })
+            
+            csv_file_loaded = True
+            app.logger.info(f"Auto-loaded CSV with {len(csv_error_data)} error records")
+            
+        except Exception as e:
+            app.logger.error(f"Failed to auto-load CSV: {e}")
+
+
 if __name__ == '__main__':
+    # Auto-load CSV on startup
+    auto_load_csv()
     app.run(debug=True, host='0.0.0.0', port=3000)

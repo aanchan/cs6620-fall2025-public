@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Error Labeling Interface</title>
+    <style>
+        html, body {
+            height: 100%;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            min-height: 100vh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            background-color: #fff;
+            padding: clamp(8px, 2vw, 32px);
+            border-radius: 0;
+            box-shadow: none;
+            width: 100%;
+            max-width: 1400px;
+            min-height: 100vh;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+        h1, h2, h3 {
+            color: #0056b3;
+            margin-bottom: 15px;
+        }
+        .section-box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .controls-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        input[type="text"], input[type="file"], select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="text"] {
+            width: 300px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .waveform-container {
+            width: 100%;
+            height: 200px;
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            position: relative;
+        }
+        #waveform {
+            width: 100%;
+            height: 100%;
+        }
+        .error-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+        }
+        .error-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+        .error-item:hover {
+            background-color: #f0f0f0;
+        }
+        .error-item.selected {
+            background-color: #e3f2fd;
+            font-weight: bold;
+        }
+        .error-phrase {
+            flex: 1;
+            margin-right: 10px;
+        }
+        .error-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .current-error {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .labeling-controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .labeling-controls button {
+            margin: 0 5px;
+        }
+        .region-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .zoom-controls {
+            text-align: center;
+            margin: 10px 0;
+        }
+        .zoom-controls button {
+            margin: 0 2px;
+        }
+        #directory_path, #csv_path {
+            width: 350px;
+        }
+        @media (max-width: 768px) {
+            .controls-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            input[type="text"] {
+                width: 100%;
+            }
+            #directory_path, #csv_path {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Speech Error Labeling Interface</h1>
+
+        <div class="section-box">
+            <h2>1. Load CSV Error Data</h2>
+            <div class="controls-row">
+                <input type="file" id="csvFileInput" accept=".csv">
+                <button onclick="uploadCsvFile()">Upload CSV</button>
+                <span>or</span>
+                <input type="text" id="csv_path" placeholder="/path/to/err-dataset-orig.csv">
+                <button onclick="loadCsvFromPath()">Load from Path</button>
+            </div>
+            <div id="csv-message" class="message" style="display: none;"></div>
+        </div>
+
+        <div class="section-box">
+            <h2>2. Select Audio Directory</h2>
+            <div class="controls-row">
+                <input type="text" id="directory_path" placeholder="/path/to/audio/files">
+                <button onclick="selectDirectory()">Load Directory</button>
+            </div>
+            <div id="directory-message" class="message" style="display: none;"></div>
+        </div>
+
+        <div class="section-box" id="labeling-section" style="display: none;">
+            <h2>3. Label Speech Errors</h2>
+            
+            <div class="controls-row">
+                <h3>Error Records (<span id="error-count">0</span>):</h3>
+                <button onclick="prevError()">← Previous</button>
+                <button onclick="nextError()">Next →</button>
+            </div>
+            
+            <div class="error-list" id="error-list"></div>
+            
+            <div class="current-error" id="current-error" style="display: none;">
+                <h3>Current Error:</h3>
+                <div><strong>Record ID:</strong> <span id="current-record-id">-</span></div>
+                <div><strong>Audio File:</strong> <span id="current-audio-file">-</span></div>
+                <div><strong>Phrase:</strong> "<span id="current-phrase">-</span>"</div>
+                <div><strong>Time:</strong> <span id="current-time">-</span></div>
+            </div>
+
+            <div class="waveform-container">
+                <div id="waveform"></div>
+            </div>
+
+            <div class="zoom-controls">
+                <button onclick="zoomIn()">Zoom In</button>
+                <button onclick="zoomOut()">Zoom Out</button>
+                <button onclick="zoomToFit()">Fit</button>
+                <button onclick="seekToError()">Go to Error Time</button>
+            </div>
+
+            <div class="labeling-controls">
+                <button onclick="playPause()" id="play-btn">Play</button>
+                <button onclick="stop()">Stop</button>
+                <button onclick="playSelection()" id="play-selection-btn" disabled>Play Selection</button>
+                <button onclick="clearRegions()">Clear Selections</button>
+                <button onclick="saveCurrentLabel()" id="save-btn" disabled>Save Label</button>
+            </div>
+
+            <div class="region-info" id="region-info" style="display: none;">
+                <div><strong>Selected Region:</strong> <span id="region-start">-</span>s to <span id="region-end">-</span>s</div>
+                <div><strong>Duration:</strong> <span id="region-duration">-</span>s</div>
+            </div>
+
+            <div id="label-message" class="message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/wavesurfer.js@6"></script>
+    <script src="https://unpkg.com/wavesurfer.js@6/dist/plugin/wavesurfer.regions.min.js"></script>
+
+    <script>
+        let wavesurfer = null;
+        let regions = null;
+        let csvData = [];
+        let currentErrorIndex = -1;
+        let currentRegion = null;
+        let audioDirectory = '';
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                if (data.currentDirectory) {
+                    document.getElementById('directory_path').value = data.currentDirectory;
+                    audioDirectory = data.currentDirectory;
+                }
+
+                if (data.csvLoaded && data.csvRecordCount > 0) {
+                    await loadCsvData();
+                }
+            } catch (error) {
+                console.error('Error loading initial status:', error);
+            }
+        });
+
+        async function uploadCsvFile() {
+            const file = document.getElementById('csvFileInput').files[0];
+            if (!file) {
+                showMessage('csv-message', 'Please select a CSV file.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('csv_file', file);
+
+            showMessage('csv-message', 'Uploading CSV...', 'success');
+
+            try {
+                const response = await fetch('/load_csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('csv-message', data.message, 'success');
+                    await loadCsvData();
+                } else {
+                    showMessage('csv-message', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('csv-message', 'Error uploading CSV file.', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function loadCsvFromPath() {
+            const csvPath = document.getElementById('csv_path').value;
+            if (!csvPath) {
+                showMessage('csv-message', 'Please enter CSV file path.', 'error');
+                return;
+            }
+
+            showMessage('csv-message', 'Loading CSV from path...', 'success');
+
+            try {
+                const response = await fetch('/load_csv', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `csv_path=${encodeURIComponent(csvPath)}`
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('csv-message', data.message, 'success');
+                    await loadCsvData();
+                } else {
+                    showMessage('csv-message', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('csv-message', 'Error loading CSV file.', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function loadCsvData() {
+            try {
+                const response = await fetch('/get_csv_data');
+                const data = await response.json();
+                
+                if (data.success) {
+                    csvData = data.data;
+                    renderErrorList();
+                    document.getElementById('labeling-section').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading CSV data:', error);
+            }
+        }
+
+        async function selectDirectory() {
+            const path = document.getElementById('directory_path').value;
+            if (!path) {
+                showMessage('directory-message', 'Please enter directory path.', 'error');
+                return;
+            }
+
+            showMessage('directory-message', 'Loading directory...', 'success');
+
+            try {
+                const response = await fetch('/select_directory', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `directory_path=${encodeURIComponent(path)}`
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    audioDirectory = path;
+                    showMessage('directory-message', data.message, 'success');
+                    
+                    // If CSV is loaded, show labeling section
+                    if (csvData.length > 0) {
+                        document.getElementById('labeling-section').style.display = 'block';
+                    }
+                } else {
+                    showMessage('directory-message', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('directory-message', 'Error loading directory.', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        function renderErrorList() {
+            const errorList = document.getElementById('error-list');
+            errorList.innerHTML = '';
+            
+            document.getElementById('error-count').textContent = csvData.length;
+
+            csvData.forEach((error, index) => {
+                const div = document.createElement('div');
+                div.className = 'error-item';
+                div.onclick = () => selectError(index);
+                
+                div.innerHTML = `
+                    <div class="error-phrase">#${error.record_id}: "${error.example_phrase}"</div>
+                    <div class="error-time">${error.record_file} @ ${formatTime(error.record_time)}</div>
+                `;
+                
+                errorList.appendChild(div);
+            });
+
+            if (csvData.length > 0) {
+                selectError(0);
+            }
+        }
+
+        function selectError(index) {
+            if (index < 0 || index >= csvData.length) return;
+            
+            // Update UI
+            const errorItems = document.querySelectorAll('.error-item');
+            errorItems.forEach(item => item.classList.remove('selected'));
+            errorItems[index].classList.add('selected');
+
+            currentErrorIndex = index;
+            const error = csvData[index];
+            
+            // Update current error display
+            document.getElementById('current-record-id').textContent = error.record_id;
+            document.getElementById('current-audio-file').textContent = error.record_file;
+            document.getElementById('current-phrase').textContent = error.example_phrase;
+            document.getElementById('current-time').textContent = formatTime(error.record_time);
+            document.getElementById('current-error').style.display = 'block';
+
+            // Load audio file
+            loadAudioFile(error.record_file);
+        }
+
+        function loadAudioFile(filename) {
+            const audioUrl = `/audio_files/${filename}`;
+            
+            // Destroy existing wavesurfer instance
+            if (wavesurfer) {
+                wavesurfer.destroy();
+            }
+
+            // Create new wavesurfer instance
+            wavesurfer = WaveSurfer.create({
+                container: '#waveform',
+                waveColor: '#4F4A85',
+                progressColor: '#383351',
+                height: 200,
+                normalize: true,
+                backend: 'WebAudio',
+                plugins: [
+                    WaveSurfer.regions.create({
+                        regions: [],
+                        dragSelection: {
+                            slop: 5
+                        }
+                    })
+                ]
+            });
+
+            // Load the audio
+            wavesurfer.load(audioUrl);
+
+            // Handle region events
+            wavesurfer.on('region-created', (region) => {
+                // Clear previous regions first
+                const allRegions = wavesurfer.regions.list;
+                Object.keys(allRegions).forEach(id => {
+                    if (allRegions[id] !== region) {
+                        allRegions[id].remove();
+                    }
+                });
+                
+                currentRegion = region;
+                updateRegionInfo(region);
+                document.getElementById('save-btn').disabled = false;
+                document.getElementById('play-selection-btn').disabled = false;
+            });
+
+            wavesurfer.on('region-updated', (region) => {
+                updateRegionInfo(region);
+            });
+
+            wavesurfer.on('region-removed', (region) => {
+                if (region === currentRegion) {
+                    currentRegion = null;
+                    hideRegionInfo();
+                    document.getElementById('save-btn').disabled = true;
+                    document.getElementById('play-selection-btn').disabled = true;
+                }
+            });
+
+            wavesurfer.on('ready', () => {
+                seekToError();
+            });
+
+            wavesurfer.on('error', (error) => {
+                console.error('WaveSurfer error:', error);
+                showMessage('label-message', `Error loading audio: ${error}`, 'error');
+            });
+        }
+
+        function updateRegionInfo(region) {
+            const start = region.start.toFixed(3);
+            const end = region.end.toFixed(3);
+            const duration = (region.end - region.start).toFixed(3);
+            
+            document.getElementById('region-start').textContent = start;
+            document.getElementById('region-end').textContent = end;
+            document.getElementById('region-duration').textContent = duration;
+            document.getElementById('region-info').style.display = 'block';
+        }
+
+        function hideRegionInfo() {
+            document.getElementById('region-info').style.display = 'none';
+        }
+
+        function seekToError() {
+            if (!wavesurfer || currentErrorIndex === -1) return;
+            
+            const error = csvData[currentErrorIndex];
+            const duration = wavesurfer.getDuration();
+            
+            if (error.record_time <= duration) {
+                wavesurfer.seekTo(error.record_time / duration);
+                
+                // Clear existing regions
+                wavesurfer.clearRegions();
+                
+                // Add a marker region at the error time (5-second window)
+                const start = Math.max(0, error.record_time - 2.5);
+                const end = Math.min(duration, error.record_time + 2.5);
+                
+                wavesurfer.addRegion({
+                    start: start,
+                    end: end,
+                    color: 'rgba(255, 0, 0, 0.1)',
+                    drag: true,
+                    resize: true,
+                    id: 'error-region-' + Date.now()
+                });
+            }
+        }
+
+        function playPause() {
+            if (!wavesurfer) return;
+            
+            wavesurfer.playPause();
+            const btn = document.getElementById('play-btn');
+            btn.textContent = wavesurfer.isPlaying() ? 'Pause' : 'Play';
+        }
+
+        function stop() {
+            if (!wavesurfer) return;
+            
+            wavesurfer.stop();
+            document.getElementById('play-btn').textContent = 'Play';
+        }
+
+        function playSelection() {
+            if (!wavesurfer || !currentRegion) {
+                showMessage('label-message', 'No region selected to play.', 'error');
+                return;
+            }
+            
+            // Stop current playback
+            wavesurfer.stop();
+            
+            // Play the selected region
+            currentRegion.play();
+        }
+
+        function zoomIn() {
+            if (!wavesurfer) return;
+            const currentZoom = wavesurfer.params.minPxPerSec || 20;
+            wavesurfer.zoom(currentZoom * 1.5);
+        }
+
+        function zoomOut() {
+            if (!wavesurfer) return;
+            const currentZoom = wavesurfer.params.minPxPerSec || 20;
+            wavesurfer.zoom(Math.max(1, currentZoom * 0.75));
+        }
+
+        function zoomToFit() {
+            if (!wavesurfer) return;
+            wavesurfer.zoom(1);
+        }
+
+        function clearRegions() {
+            if (wavesurfer && wavesurfer.clearRegions) {
+                wavesurfer.clearRegions();
+                currentRegion = null;
+                hideRegionInfo();
+                document.getElementById('save-btn').disabled = true;
+                document.getElementById('play-selection-btn').disabled = true;
+            }
+        }
+
+        async function saveCurrentLabel() {
+            if (!currentRegion || currentErrorIndex === -1) {
+                showMessage('label-message', 'No region selected to save.', 'error');
+                return;
+            }
+
+            const error = csvData[currentErrorIndex];
+            const labelData = {
+                record_id: error.record_id,
+                start_time: currentRegion.start,
+                end_time: currentRegion.end,
+                audio_file: error.record_file
+            };
+
+            try {
+                const response = await fetch('/save_label', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(labelData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('label-message', data.message, 'success');
+                    
+                    // Move to next error
+                    if (currentErrorIndex < csvData.length - 1) {
+                        setTimeout(() => nextError(), 1000);
+                    }
+                } else {
+                    showMessage('label-message', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('label-message', 'Error saving label.', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        function prevError() {
+            if (currentErrorIndex > 0) {
+                selectError(currentErrorIndex - 1);
+            }
+        }
+
+        function nextError() {
+            if (currentErrorIndex < csvData.length - 1) {
+                selectError(currentErrorIndex + 1);
+            }
+        }
+
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = (seconds % 60).toFixed(2).padStart(5, '0');
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs}`;
+        }
+
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = 'block';
+            
+            // Auto-hide success messages after 3 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    element.style.display = 'none';
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>
