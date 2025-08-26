@@ -26,7 +26,11 @@ sudo yum update -y
 
 # Install required packages
 echo -e "${YELLOW}🛠️  Installing required packages...${NC}"
-sudo yum install -y python3 python3-pip git nginx curl wget
+sudo yum install -y python3 python3-pip git curl wget
+
+# Install nginx from Amazon Linux Extras
+echo -e "${YELLOW}🌐 Installing nginx from Amazon Linux Extras...${NC}"
+sudo amazon-linux-extras install -y nginx1
 
 # Install Python dependencies
 echo -e "${YELLOW}🐍 Installing Python dependencies...${NC}"
