@@ -136,14 +136,6 @@ cat README.md
 ./deploy-simple.sh
 ```
 
-### **For Instructors**
-Each branch contains:
-- **Comprehensive guides** with theory and practice
-- **Automation scripts** for hands-on learning
-- **Console and CLI** approaches for complete understanding
-- **Cost-conscious implementations** using free tiers
-- **Security best practices** throughout
-
 ### **Branch Structure**
 - Each week builds incrementally on previous concepts
 - Branches can be used independently for specific topics
