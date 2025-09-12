@@ -20,9 +20,9 @@ git checkout week-02
 
 # Your terminal should look like this
 
-<img width="1425" height="305" alt="Screenshot 2025-09-11 at 6 16 13 PM" src="https://github.com/user-attachments/assets/f0ba28e9-8399-4d93-8e78-006aff8ac7fd" />
+![Terminal view](images/screenshot-1.png)
 
 # Navigate to 127.0.0.1:3000 in the browser, the app should render like this
-<img width="1889" height="917" alt="Screenshot 2025-09-11 at 6 18 04 PM" src="https://github.com/user-attachments/assets/567cd194-31d5-4ab3-8484-29c04feaa872" />
+![Browser view](images/screenshot-2.png)
 
 
