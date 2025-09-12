@@ -23,6 +23,7 @@ git checkout week-02
 ![Terminal view](images/screenshot-1.png)
 
 # Navigate to 127.0.0.1:3000 in the browser, the app should render like this
+
 ![Browser view](images/screenshot-2.png)
 
 
