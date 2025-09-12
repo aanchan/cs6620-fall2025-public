@@ -1,4 +1,0 @@
-Flask
-pygame
-Flask-CORS
-pydub
