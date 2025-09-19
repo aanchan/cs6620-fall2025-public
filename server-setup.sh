@@ -26,7 +26,8 @@ sudo yum update -y
 
 # Install required packages
 echo -e "${YELLOW}🛠️  Installing required packages...${NC}"
-sudo yum install -y python3 python3-pip git curl wget
+sudo yum install -y curl --allowerasing
+sudo yum install -y python3 python3-pip git wget
 
 # Install Python dependencies
 echo -e "${YELLOW}🐍 Installing Python dependencies...${NC}"
