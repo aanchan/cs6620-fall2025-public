@@ -18,7 +18,7 @@ fi
 
 # Start gunicorn in daemon mode
 echo "⚙️  Starting gunicorn server..."
-sudo /home/ec2-user/.local/bin/gunicorn -w 4 -b 0.0.0.0:80 --daemon app:app
+sudo PYTHONPATH="/home/ec2-user/.local/lib/python3.9/site-packages:$PYTHONPATH" /home/ec2-user/.local/bin/gunicorn -w 4 -b 0.0.0.0:80 --daemon app:app
 
 # Check if it started successfully
 sleep 2
@@ -32,6 +32,6 @@ if pgrep -f "gunicorn.*app:app" > /dev/null; then
 else
     echo "❌ Failed to start application!"
     echo "Check the logs or try running without daemon mode for debugging:"
-    echo "sudo /home/ec2-user/.local/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app"
+    echo "sudo PYTHONPATH=\"/home/ec2-user/.local/lib/python3.9/site-packages:\$PYTHONPATH\" /home/ec2-user/.local/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app"
     exit 1
 fi
