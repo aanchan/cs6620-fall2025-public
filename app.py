@@ -1,8 +1,14 @@
 import os
-import re
 import csv
 from io import StringIO
-from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    send_from_directory,
+    send_file,
+)
 from flask_cors import CORS
 from pydub import AudioSegment
 import tempfile
@@ -52,6 +58,7 @@ def parse_log_content(log_content):
     reader = csv.reader(StringIO(log_content), delimiter=delimiter)
     header = next(reader, None)
     # Find relevant column indices
+    
     def col(name):
         try:
             return header.index(name)
@@ -65,7 +72,17 @@ def parse_log_content(log_content):
     col_short_start = col('shortFormStart')
     col_short_end = col('shortFormEnd')
     for row in reader:
-        if not row or len(row) <= max(filter(None, [col_audio, col_long_start, col_long_end, col_long_error, col_short_error, col_short_start, col_short_end])):
+        needed_cols = [
+            col_audio,
+            col_long_start,
+            col_long_end,
+            col_long_error,
+            col_short_error,
+            col_short_start,
+            col_short_end,
+        ]
+        max_idx = max(filter(None, needed_cols)) if any(c is not None for c in needed_cols) else -1
+        if not row or len(row) <= max_idx:
             continue
         audio_path = row[col_audio]
         filename = os.path.basename(audio_path)
@@ -220,7 +237,7 @@ def upload_log():
         parsed_transcription_data = parse_log_content(log_content)
         # Re-select directory to refresh playlist with new transcription data
         if current_directory:
-            pass # The frontend will call selectDirectory() after a successful upload
+            pass  # The frontend will call selectDirectory() after a successful upload
         return jsonify({
             "success": True,
             "message": f"Log file uploaded and parsed successfully. {len(parsed_transcription_data)} entries found."
@@ -254,10 +271,13 @@ def load_log_from_path():
         parsed_transcription_data = parse_log_content(log_content)
         # Re-select directory to refresh playlist with new transcription data
         if current_directory:
-            pass # The frontend will call selectDirectory() after a successful load
+            pass  # The frontend will call selectDirectory() after a successful load
         return jsonify({
             "success": True,
-            "message": f"Log file loaded from path and parsed successfully. {len(parsed_transcription_data)} entries found."
+            "message": (
+                f"Log file loaded from path and parsed successfully. "
+                f"{len(parsed_transcription_data)} entries found."
+            ),
         })
     except Exception as e:
         app.logger.error(f"Error loading or parsing log file from path '{log_file_path}': {e}")
@@ -339,7 +359,10 @@ def load_csv():
                     record_file = row['recordFile'].strip()
                     
                     # Debug logging
-                    app.logger.info(f"Processing CSV row: ID={row['recordErrorID']}, File='{record_file}', Time={record_time}")
+                    app.logger.info(
+                        f"Processing CSV row: ID={row['recordErrorID']}, "
+                        f"File='{record_file}', Time={record_time}"
+                    )
                     
                     # Skip rows with empty filenames
                     if not record_file:
@@ -428,9 +451,11 @@ def save_label():
             # Write the labeled data
             writer.writerow(label_data)
         
-        app.logger.info(f"Label saved to {output_file}: Record {data['record_id']}, "
-                       f"Time: {data['start_time']:.3f}-{data['end_time']:.3f}s, "
-                       f"File: {data['audio_file']}")
+        app.logger.info(
+            f"Label saved to {output_file}: Record {data['record_id']}, "
+            f"Time: {data['start_time']:.3f}-{data['end_time']:.3f}s, "
+            f"File: {data['audio_file']}"
+        )
         
         return jsonify({
             "success": True,
